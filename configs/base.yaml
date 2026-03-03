@@ -28,7 +28,7 @@ grpo:
   kl_coeff: 0.08
   batch_size: 1
   gradient_accumulation_steps: 12
-  max_completion_length: 384
+  max_completion_length: 256
   temperature: 0.65
   top_p: 0.95
   num_train_epochs: 1

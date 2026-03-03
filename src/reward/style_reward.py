@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 
 class StyleRewardEngine:
     """语气偏好奖励引擎。
@@ -19,12 +21,14 @@ class StyleRewardEngine:
         max_positive_score: float = 1.0,
         max_negative_penalty: float = 1.0,
         min_relevance: float = 0.3,
+        min_relevance_floor: float = 0.6,
     ) -> None:
         self.positive_weight = positive_weight
         self.negative_weight = negative_weight
         self.max_positive_score = max_positive_score
         self.max_negative_penalty = max_negative_penalty
         self.min_relevance = min_relevance
+        self.min_relevance_floor = min_relevance_floor
 
     def score(
         self,
@@ -52,18 +56,22 @@ class StyleRewardEngine:
         return rewards
 
     def _relevance_score(self, prompt: str, completion: str, reference: str | None) -> float:
-        """简单关键词重叠相关性校验。
+        """中文友好的相关性校验。
 
-        说明：这是一个轻量默认实现，可在后续替换成 embedding 相似度实现。
+        说明：
+        - 使用字符级重叠，避免中文 split 后全为空；
+        - 低相关时不再直接归零，而是降权到保底分，避免 GRPO 奖励全零。
         """
         source = reference if reference else prompt
-        prompt_keywords = set(source.replace("？", " ").replace("。", " ").split())
-        completion_keywords = set(completion.split())
-        if not prompt_keywords:
+        source_chars = _to_char_set(source)
+        completion_chars = _to_char_set(completion)
+        if not source_chars:
             return 1.0
 
-        overlap = len(prompt_keywords & completion_keywords) / len(prompt_keywords)
-        return 1.0 if overlap >= self.min_relevance else 0.0
+        overlap = len(source_chars & completion_chars) / len(source_chars)
+        if overlap >= self.min_relevance:
+            return 1.0
+        return max(self.min_relevance_floor, overlap)
 
     @staticmethod
     def _length_score(completion: str) -> float:
@@ -74,3 +82,9 @@ class StyleRewardEngine:
         if length > 1000:
             return 0.5
         return 1.0
+
+
+def _to_char_set(text: str) -> set[str]:
+    cleaned = re.sub(r"\s+", "", text or "")
+    cleaned = re.sub(r"[\W_]+", "", cleaned, flags=re.UNICODE)
+    return set(cleaned)
