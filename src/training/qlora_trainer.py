@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -96,30 +97,23 @@ class QLoRATrainer:
 
         stage_output = self.output_root / "qlora"
         stage_output.mkdir(parents=True, exist_ok=True)
-        train_args = SFTConfig(
-            output_dir=str(stage_output),
-            per_device_train_batch_size=self.config.per_device_train_batch_size,
-            gradient_accumulation_steps=self.config.gradient_accumulation_steps,
-            learning_rate=self.config.learning_rate,
-            num_train_epochs=self.config.num_train_epochs,
-            max_seq_length=self.config.max_seq_length,
-            logging_steps=self.config.logging_steps,
-            save_strategy="epoch",
-            evaluation_strategy="epoch" if eval_dataset is not None else "no",
-            bf16=self.config.bnb_4bit_compute_dtype.lower() == "bfloat16",
-            fp16=self.config.bnb_4bit_compute_dtype.lower() == "float16",
-            report_to="none",
-        )
+        train_args = _build_sft_config(self.config, str(stage_output), eval_dataset is not None)
 
-        trainer = SFTTrainer(
-            model=model,
-            args=train_args,
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset,
-            peft_config=peft_config,
-            tokenizer=tokenizer,
-            dataset_text_field="text",
-        )
+        trainer_kwargs = {
+            "model": model,
+            "args": train_args,
+            "train_dataset": train_dataset,
+            "eval_dataset": eval_dataset,
+            "peft_config": peft_config,
+            "dataset_text_field": "text",
+        }
+        sft_trainer_params = set(inspect.signature(SFTTrainer.__init__).parameters.keys())
+        if "processing_class" in sft_trainer_params:
+            trainer_kwargs["processing_class"] = tokenizer
+        elif "tokenizer" in sft_trainer_params:
+            trainer_kwargs["tokenizer"] = tokenizer
+
+        trainer = SFTTrainer(**trainer_kwargs)
         trainer.train()
 
         ckpt_dir = self.output_root / "qlora" / "checkpoint-final"
@@ -170,3 +164,32 @@ def _build_training_text(item: dict) -> str:
 def _load_sft_dataset(path: str):
     dataset = load_dataset("json", data_files=path, split="train")
     return dataset.map(lambda row: {"text": _build_training_text(row)})
+
+
+def _build_sft_config(config: QLoRATrainConfig, output_dir: str, has_eval_dataset: bool) -> SFTConfig:
+    """兼容不同 TRL 版本的 SFTConfig 字段差异。"""
+    common_kwargs = {
+        "output_dir": output_dir,
+        "per_device_train_batch_size": config.per_device_train_batch_size,
+        "gradient_accumulation_steps": config.gradient_accumulation_steps,
+        "learning_rate": config.learning_rate,
+        "num_train_epochs": config.num_train_epochs,
+        "logging_steps": config.logging_steps,
+        "save_strategy": "epoch",
+        "bf16": config.bnb_4bit_compute_dtype.lower() == "bfloat16",
+        "fp16": config.bnb_4bit_compute_dtype.lower() == "float16",
+        "report_to": "none",
+    }
+
+    signature_params = set(inspect.signature(SFTConfig.__init__).parameters.keys())
+    if "evaluation_strategy" in signature_params:
+        common_kwargs["evaluation_strategy"] = "epoch" if has_eval_dataset else "no"
+    elif "eval_strategy" in signature_params:
+        common_kwargs["eval_strategy"] = "epoch" if has_eval_dataset else "no"
+
+    if "max_seq_length" in signature_params:
+        common_kwargs["max_seq_length"] = config.max_seq_length
+    elif "max_length" in signature_params:
+        common_kwargs["max_length"] = config.max_seq_length
+
+    return SFTConfig(**common_kwargs)

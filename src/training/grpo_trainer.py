@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -85,20 +86,7 @@ class GRPOTrainer:
 
         stage_output = self.output_root / "grpo"
         stage_output.mkdir(parents=True, exist_ok=True)
-        training_args = TRLGRPOConfig(
-            output_dir=str(stage_output),
-            learning_rate=self.config.learning_rate,
-            per_device_train_batch_size=self.config.batch_size,
-            gradient_accumulation_steps=self.config.gradient_accumulation_steps,
-            num_train_epochs=self.config.num_train_epochs,
-            num_generations=self.config.num_generations,
-            max_completion_length=self.config.max_completion_length,
-            beta=self.config.beta,
-            temperature=self.config.temperature,
-            top_p=self.config.top_p,
-            logging_steps=self.config.logging_steps,
-            report_to="none",
-        )
+        training_args = _build_grpo_config(self.config, str(stage_output))
 
         def reward_func(prompts, completions, **kwargs):
             prompt_texts = [_normalize_prompt_text(item) for item in prompts]
@@ -112,14 +100,20 @@ class GRPOTrainer:
                 references=references,
             )
 
-        trainer = TRLGRPOTrainer(
-            model=model,
-            args=training_args,
-            processing_class=tokenizer,
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset,
-            reward_funcs=[reward_func],
-        )
+        trainer_kwargs = {
+            "model": model,
+            "args": training_args,
+            "train_dataset": train_dataset,
+            "eval_dataset": eval_dataset,
+            "reward_funcs": [reward_func],
+        }
+        grpo_trainer_params = set(inspect.signature(TRLGRPOTrainer.__init__).parameters.keys())
+        if "processing_class" in grpo_trainer_params:
+            trainer_kwargs["processing_class"] = tokenizer
+        elif "tokenizer" in grpo_trainer_params:
+            trainer_kwargs["tokenizer"] = tokenizer
+
+        trainer = TRLGRPOTrainer(**trainer_kwargs)
         trainer.train()
 
         ckpt_dir = self.output_root / "grpo" / "checkpoint-final"
@@ -173,3 +167,28 @@ def _normalize_completion_text(completion_item) -> str:
     if isinstance(completion_item, dict):
         return str(completion_item.get("content", ""))
     return str(completion_item)
+
+
+def _build_grpo_config(config: GRPOTrainConfig, output_dir: str) -> TRLGRPOConfig:
+    """兼容不同 TRL 版本的 GRPOConfig 字段差异。"""
+    kwargs = {
+        "output_dir": output_dir,
+        "learning_rate": config.learning_rate,
+        "per_device_train_batch_size": config.batch_size,
+        "gradient_accumulation_steps": config.gradient_accumulation_steps,
+        "num_train_epochs": config.num_train_epochs,
+        "num_generations": config.num_generations,
+        "beta": config.beta,
+        "temperature": config.temperature,
+        "top_p": config.top_p,
+        "logging_steps": config.logging_steps,
+        "report_to": "none",
+    }
+
+    signature_params = set(inspect.signature(TRLGRPOConfig.__init__).parameters.keys())
+    if "max_completion_length" in signature_params:
+        kwargs["max_completion_length"] = config.max_completion_length
+    elif "max_new_tokens" in signature_params:
+        kwargs["max_new_tokens"] = config.max_completion_length
+
+    return TRLGRPOConfig(**kwargs)
