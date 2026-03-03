@@ -164,6 +164,11 @@ def _build_training_text(item: dict) -> str:
 
 def _load_sft_dataset(path: str):
     dataset = load_dataset("json", data_files=path, split="train")
+    if "completion" not in dataset.column_names:
+        if "reference" in dataset.column_names:
+            dataset = dataset.map(lambda row: {"completion": row.get("reference", "")})
+        else:
+            dataset = dataset.map(lambda _: {"completion": ""})
     return dataset.map(lambda row: {"text": _build_training_text(row)})
 
 
