@@ -105,9 +105,10 @@ class QLoRATrainer:
             "train_dataset": train_dataset,
             "eval_dataset": eval_dataset,
             "peft_config": peft_config,
-            "dataset_text_field": "text",
         }
         sft_trainer_params = set(inspect.signature(SFTTrainer.__init__).parameters.keys())
+        if "dataset_text_field" in sft_trainer_params:
+            trainer_kwargs["dataset_text_field"] = "text"
         if "processing_class" in sft_trainer_params:
             trainer_kwargs["processing_class"] = tokenizer
         elif "tokenizer" in sft_trainer_params:
