@@ -81,8 +81,18 @@ class GRPOTrainer:
         train_dataset = load_dataset("json", data_files=str(train_file), split="train")
         if "prompt" not in train_dataset.column_names:
             raise ValueError("GRPO 训练数据必须包含 prompt 字段")
+        if "completion" not in train_dataset.column_names:
+            if "reference" in train_dataset.column_names:
+                train_dataset = train_dataset.map(lambda row: {"completion": row.get("reference", "")})
+            else:
+                train_dataset = train_dataset.map(lambda _: {"completion": ""})
 
         eval_dataset = load_dataset("json", data_files=str(eval_file), split="train") if eval_file else None
+        if eval_dataset is not None and "completion" not in eval_dataset.column_names:
+            if "reference" in eval_dataset.column_names:
+                eval_dataset = eval_dataset.map(lambda row: {"completion": row.get("reference", "")})
+            else:
+                eval_dataset = eval_dataset.map(lambda _: {"completion": ""})
 
         stage_output = self.output_root / "grpo"
         stage_output.mkdir(parents=True, exist_ok=True)
