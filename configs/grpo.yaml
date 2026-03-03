@@ -1,0 +1,15 @@
+runtime:
+  output_root: outputs
+
+grpo:
+  num_generations: 4
+  learning_rate: 0.00002
+  beta: 0.04
+  kl_coeff: 0.05
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  max_completion_length: 512
+  temperature: 0.7
+  top_p: 0.95
+  num_train_epochs: 1
+  logging_steps: 10

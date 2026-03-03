@@ -1,0 +1,14 @@
+pydantic>=2.7
+pyyaml>=6.0
+pandas>=2.0
+datasets>=2.14
+torch>=2.2
+transformers>=4.40
+peft>=0.11
+trl>=0.9.0
+accelerate>=0.30
+bitsandbytes>=0.43
+sentencepiece>=0.2
+fastapi>=0.110
+uvicorn>=0.30
+langchain-core>=0.2

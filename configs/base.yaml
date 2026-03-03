@@ -1,0 +1,35 @@
+runtime:
+  seed: 42
+  output_root: outputs
+  log_with: tensorboard
+
+qlora:
+  model_name_or_path: Qwen/Qwen2-7B-Instruct
+  load_in_4bit: true
+  bnb_4bit_quant_type: nf4
+  bnb_4bit_use_double_quant: true
+  bnb_4bit_compute_dtype: bfloat16
+  r: 8
+  lora_alpha: 16
+  lora_dropout: 0.05
+  target_modules: [q_proj, v_proj]
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 0.00015
+  num_train_epochs: 3
+  max_seq_length: 1024
+  gradient_checkpointing: true
+  logging_steps: 20
+
+grpo:
+  num_generations: 2
+  learning_rate: 0.000015
+  beta: 0.03
+  kl_coeff: 0.08
+  batch_size: 1
+  gradient_accumulation_steps: 12
+  max_completion_length: 384
+  temperature: 0.65
+  top_p: 0.95
+  num_train_epochs: 1
+  logging_steps: 20
